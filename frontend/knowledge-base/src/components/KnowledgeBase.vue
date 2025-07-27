@@ -1,79 +1,120 @@
 <template>
   <div class="knowledge-base">
     <h1>个人知识库</h1>
-    <div class="controls">
-      <button @click="fetchKnowledgeItems">刷新</button>
-      <button @click="showAddForm = !showAddForm">
-        {{ showAddForm ? '取消添加' : '添加知识条目' }}
-      </button>
-      <button @click="showVoiceInput = !showVoiceInput">
-        {{ showVoiceInput ? '关闭语音输入' : '语音输入' }}
-      </button>
-      <button @click="getLocation">获取当前位置</button>
-    </div>
     
-    <!-- 语音输入组件 -->
-    <div v-if="showVoiceInput" class="voice-input">
-      <h2>语音输入</h2>
-      <div class="recording-controls">
-        <button @click="startRecording" :disabled="isRecording">
-          {{ isRecording ? '录音中...' : '开始录音' }}
+    <!-- 登录/注册表单 -->
+    <div v-if="!isLoggedIn" class="auth-form">
+      <h2>{{ isLogin ? '用户登录' : '用户注册' }}</h2>
+      <form @submit.prevent="handleAuth">
+        <div>
+          <label for="username">用户名:</label>
+          <input id="username" v-model="authForm.username" required />
+        </div>
+        <div>
+          <label for="email">邮箱:</label>
+          <input id="email" v-model="authForm.email" type="email" required />
+        </div>
+        <div>
+          <label for="password">密码:</label>
+          <input id="password" v-model="authForm.password" type="password" required />
+        </div>
+        <button type="submit">{{ isLogin ? '登录' : '注册' }}</button>
+        <button type="button" @click="isLogin = !isLogin">
+          {{ isLogin ? '没有账户？去注册' : '已有账户？去登录' }}
         </button>
-        <button @click="stopRecording" :disabled="!isRecording">
-          停止录音
-        </button>
-      </div>
-      <div v-if="transcribedText" class="transcribed-text">
-        <h3>识别结果：</h3>
-        <p>{{ transcribedText }}</p>
-        <button @click="useTranscribedText">使用识别文本</button>
-      </div>
-    </div>
-    
-    <!-- 添加知识条目表单 -->
-    <div v-if="showAddForm" class="add-form">
-      <h2>添加新知识条目</h2>
-      <form @submit.prevent="addKnowledgeItem">
-        <div>
-          <label for="title">标题:</label>
-          <input id="title" v-model="newItem.title" required />
-        </div>
-        <div>
-          <label for="content">内容:</label>
-          <textarea id="content" v-model="newItem.content" required></textarea>
-        </div>
-        <div>
-          <label for="category">分类:</label>
-          <input id="category" v-model="newItem.category" required />
-        </div>
-        <div>
-          <label for="location">位置:</label>
-          <input id="location" v-model="newItem.location" />
-        </div>
-        <div v-if="currentLocation" class="location-info">
-          <p>当前坐标: {{ currentLocation.latitude }}, {{ currentLocation.longitude }}</p>
-        </div>
-        <button type="submit">添加</button>
       </form>
     </div>
     
-    <!-- 知识条目列表 -->
-    <div v-if="knowledgeItems.length > 0" class="knowledge-list">
-      <h2>知识条目列表</h2>
-      <div v-for="item in knowledgeItems" :key="item.id" class="knowledge-item">
-        <h3>{{ item.title }}</h3>
-        <p>{{ item.content }}</p>
-        <p><strong>分类:</strong> {{ item.category }}</p>
-        <p v-if="item.location"><strong>位置:</strong> {{ item.location }}</p>
-        <div class="item-actions">
-          <button @click="editItem(item)">编辑</button>
-          <button @click="deleteItem(item.id)">删除</button>
+    <!-- 主界面 -->
+    <div v-else>
+      <div class="controls">
+        <button @click="fetchKnowledgeItems">刷新</button>
+        <button @click="showAddForm = !showAddForm">
+          {{ showAddForm ? '取消添加' : '添加知识条目' }}
+        </button>
+        <button @click="showVoiceInput = !showVoiceInput">
+          {{ showVoiceInput ? '关闭语音输入' : '语音输入' }}</button>
+        <button @click="getLocation">获取当前位置</button>
+        <button @click="logout">退出登录</button>
+      </div>
+      
+      <!-- 语音输入组件 -->
+      <div v-if="showVoiceInput" class="voice-input">
+        <h2>语音输入</h2>
+        <div class="recording-controls">
+          <button @click="startRecording" :disabled="isRecording">
+            {{ isRecording ? '录音中...' : '开始录音' }}
+          </button>
+          <button @click="stopRecording" :disabled="!isRecording">
+            停止录音
+          </button>
+        </div>
+        <div v-if="transcribedText" class="transcribed-text">
+          <h3>识别结果：</h3>
+          <p>{{ transcribedText }}</p>
+          <button @click="useTranscribedText">使用识别文本</button>
         </div>
       </div>
-    </div>
-    
-    <div v-else>
-      <p>暂无知识条目</p>
+      
+      <!-- 添加知识条目表单 -->
+      <div v-if="showAddForm" class="add-form">
+        <h2>添加新知识条目</h2>
+        <form @submit.prevent="addKnowledgeItem">
+          <div>
+            <label for="title">标题:</label>
+            <input id="title" v-model="newItem.title" required />
+          </div>
+          <div>
+            <label for="content">内容:</label>
+            <textarea id="content" v-model="newItem.content" required></textarea>
+          </div>
+          <div>
+            <label for="category">分类:</label>
+            <input id="category" v-model="newItem.category" required />
+          </div>
+          <div>
+            <label for="location">位置:</label>
+            <input id="location" v-model="newItem.location" />
+          </div>
+          <div v-if="currentLocation" class="location-info">
+            <p>当前坐标: {{ currentLocation.latitude }}, {{ currentLocation.longitude }}</p>
+          </div>
+          <button type="submit">添加</button>
+        </form>
+      </div>
+      
+      <!-- AI对话界面 -->
+      <div class="ai-chat">
+        <h2>AI助手</h2>
+        <div class="chat-history">
+          <div v-for="(message, index) in chatMessages" :key="index" :class="['message', message.role]">
+            <strong>{{ message.role === 'user' ? '你' : 'AI' }}:</strong> {{ message.content }}
+          </div>
+        </div>
+        <form @submit.prevent="sendChatMessage">
+          <textarea v-model="chatInput" placeholder="与AI助手对话..." required></textarea>
+          <button type="submit">发送</button>
+        </form>
+      </div>
+      
+      <!-- 知识条目列表 -->
+      <div v-if="knowledgeItems.length > 0" class="knowledge-list">
+        <h2>知识条目列表</h2>
+        <div v-for="item in knowledgeItems" :key="item.id" class="knowledge-item">
+          <h3>{{ item.title }}</h3>
+          <p>{{ item.content }}</p>
+          <p><strong>分类:</strong> {{ item.category }}</p>
+          <p v-if="item.location"><strong>位置:</strong> {{ item.location }}</p>
+          <div class="item-actions">
+            <button @click="editItem(item)">编辑</button>
+            <button @click="deleteItem(item.id)">删除</button>
+          </div>
+        </div>
+      </div>
+      
+      <div v-else>
+        <p>暂无知识条目</p>
+      </div>
     </div>
   </div>
 </template>
@@ -81,6 +122,15 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import type { KnowledgeItem } from '@/types'
+
+// 认证状态
+const isLoggedIn = ref(false)
+const isLogin = ref(true)
+const authForm = ref({
+  username: '',
+  email: '',
+  password: ''
+})
 
 // 知识条目列表
 const knowledgeItems = ref<KnowledgeItem[]>([])
@@ -114,10 +164,63 @@ const transcribedText = ref('')
 // 编辑中的条目
 const editingItem = ref<KnowledgeItem | null>(null)
 
+// AI对话相关
+const chatMessages = ref<{ role: string; content: string }[]>([])
+const chatInput = ref('')
+
+// JWT token
+const authToken = ref<string | null>(null)
+
+// 处理认证（登录/注册）
+const handleAuth = async () => {
+  try {
+    const url = isLogin.value ? 'http://localhost:8000/token' : 'http://localhost:8000/users/'
+    const formData = new FormData()
+    
+    if (isLogin.value) {
+      formData.append('username', authForm.value.username)
+      formData.append('password', authForm.value.password)
+    }
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      body: isLogin.value ? formData : JSON.stringify(authForm.value),
+      headers: isLogin.value ? {} : { 'Content-Type': 'application/json' }
+    })
+    
+    if (isLogin.value) {
+      const data = await response.json()
+      authToken.value = data.access_token
+      isLoggedIn.value = true
+      localStorage.setItem('authToken', authToken.value)
+      fetchKnowledgeItems()
+    } else {
+      // 注册成功后自动登录
+      isLogin.value = true
+      alert('注册成功，请登录')
+    }
+  } catch (error) {
+    console.error('认证失败:', error)
+    alert(isLogin.value ? '登录失败' : '注册失败')
+  }
+}
+
+// 退出登录
+const logout = () => {
+  isLoggedIn.value = false
+  authToken.value = null
+  localStorage.removeItem('authToken')
+  chatMessages.value = []
+}
+
 // 获取知识条目列表
 const fetchKnowledgeItems = async () => {
   try {
-    const response = await fetch('http://localhost:8000/knowledge')
+    const response = await fetch('http://localhost:8000/knowledge', {
+      headers: {
+        'Authorization': `Bearer ${authToken.value}`
+      }
+    })
     knowledgeItems.value = await response.json()
   } catch (error) {
     console.error('获取知识条目失败:', error)
@@ -136,7 +239,8 @@ const addKnowledgeItem = async () => {
     const response = await fetch('http://localhost:8000/knowledge', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken.value}`
       },
       body: JSON.stringify(newItem.value)
     })
@@ -175,7 +279,10 @@ const deleteItem = async (id: number) => {
   
   try {
     await fetch(`http://localhost:8000/knowledge/${id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${authToken.value}`
+      }
     })
     
     // 从列表中移除
@@ -221,7 +328,10 @@ const stopRecording = async () => {
       // 上传到后端进行语音识别
       const response = await fetch('http://localhost:8000/transcribe', {
         method: 'POST',
-        body: formData
+        body: formData,
+        headers: {
+          'Authorization': `Bearer ${authToken.value}`
+        }
       })
       
       const result = await response.json()
@@ -262,9 +372,49 @@ const getLocation = () => {
   }
 }
 
-// 初始化获取数据
+// 发送聊天消息
+const sendChatMessage = async () => {
+  if (!chatInput.value.trim()) return
+  
+  // 添加用户消息到聊天历史
+  chatMessages.value.push({ role: 'user', content: chatInput.value })
+  const userMessage = chatInput.value
+  chatInput.value = ''
+  
+  try {
+    // 发送消息到后端AI服务
+    const response = await fetch('http://localhost:8000/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken.value}`
+      },
+      body: JSON.stringify({
+        messages: [
+          { role: 'system', content: '你是一个有用的个人知识库助手。' },
+          ...chatMessages.value
+        ]
+      })
+    })
+    
+    const data = await response.json()
+    
+    // 添加AI回复到聊天历史
+    chatMessages.value.push({ role: 'assistant', content: data.response })
+  } catch (error) {
+    console.error('AI对话失败:', error)
+    chatMessages.value.push({ role: 'assistant', content: '抱歉，我无法回应您的消息。' })
+  }
+}
+
+// 初始化时检查是否有保存的token
 onMounted(() => {
-  fetchKnowledgeItems()
+  const savedToken = localStorage.getItem('authToken')
+  if (savedToken) {
+    authToken.value = savedToken
+    isLoggedIn.value = true
+    fetchKnowledgeItems()
+  }
 })
 </script>
 
@@ -273,6 +423,46 @@ onMounted(() => {
   max-width: 800px;
   margin: 0 auto;
   padding: 20px;
+}
+
+.auth-form {
+  background-color: #f5f5f5;
+  padding: 20px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.auth-form form div {
+  margin-bottom: 15px;
+}
+
+.auth-form label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.auth-form input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.auth-form button {
+  margin-right: 10px;
+  margin-bottom: 10px;
+  padding: 8px 16px;
+  background-color: #42b983;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.auth-form button:hover {
+  background-color: #359c6d;
 }
 
 .controls {
@@ -397,6 +587,60 @@ onMounted(() => {
 }
 
 .add-form button:hover {
+  background-color: #359c6d;
+}
+
+.ai-chat {
+  background-color: #f5f5f5;
+  padding: 20px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.chat-history {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 15px;
+  padding: 10px;
+  background-color: white;
+  border-radius: 4px;
+}
+
+.message {
+  margin-bottom: 10px;
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.message.user {
+  background-color: #e3f2fd;
+}
+
+.message.assistant {
+  background-color: #f5f5f5;
+}
+
+.ai-chat textarea {
+  width: 100%;
+  height: 80px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  resize: vertical;
+}
+
+.ai-chat button {
+  padding: 8px 16px;
+  background-color: #42b983;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.ai-chat button:hover {
   background-color: #359c6d;
 }
 
