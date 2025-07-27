@@ -1,0 +1,9 @@
+# 后端项目依赖
+
+fastapi>=0.68.0
+uvicorn>=0.15.0
+sqlalchemy>=1.4.0
+pydantic-settings>=2.0.0
+pyaudio>=0.2.11
+SpeechRecognition>=3.8.1
+geopy>=2.4.0
