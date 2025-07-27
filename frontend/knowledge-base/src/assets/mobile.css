@@ -1,0 +1,37 @@
+/* 移动端友好的样式 */
+@media (max-width: 768px) {
+  .knowledge-base {
+    padding: 10px;
+  }
+  
+  .auth-form,
+  .voice-input,
+  .add-form,
+  .ai-chat {
+    padding: 15px;
+  }
+  
+  .controls button {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+  }
+  
+  .recording-controls button {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+  }
+  
+  .knowledge-item {
+    padding: 10px;
+  }
+  
+  .chat-history {
+    max-height: 200px;
+  }
+  
+  .ai-chat textarea {
+    height: 60px;
+  }
+}

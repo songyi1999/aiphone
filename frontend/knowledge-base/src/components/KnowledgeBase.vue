@@ -29,6 +29,12 @@
     <div v-else>
       <div class="controls">
         <button @click="fetchKnowledgeItems">刷新</button>
+        <button @click="showCategoryManager = !showCategoryManager">
+          {{ showCategoryManager ? '关闭分类管理' : '分类管理' }}
+        </button>
+        <button @click="showMeetingRecorder = !showMeetingRecorder">
+          {{ showMeetingRecorder ? '关闭会议录音' : '会议录音' }}
+        </button>
         <button @click="showAddForm = !showAddForm">
           {{ showAddForm ? '取消添加' : '添加知识条目' }}
         </button>
@@ -36,6 +42,41 @@
           {{ showVoiceInput ? '关闭语音输入' : '语音输入' }}</button>
         <button @click="getLocation">获取当前位置</button>
         <button @click="logout">退出登录</button>
+      </div>
+      
+      <!-- 会议录音组件 -->
+      <div v-if="showMeetingRecorder" class="meeting-recorder">
+        <h2>会议录音</h2>
+        <div class="recording-controls">
+          <button @click="startMeetingRecording" :disabled="isMeetingRecording">
+            {{ isMeetingRecording ? '录音中...' : '开始录音' }}
+          </button>
+          <button @click="stopMeetingRecording" :disabled="!isMeetingRecording">
+            停止录音
+          </button>
+        </div>
+        <div v-if="meetingAudioUrl" class="meeting-audio">
+          <h3>录音文件：</h3>
+          <audio :src="meetingAudioUrl" controls></audio>
+          <button @click="saveMeetingRecording">保存录音</button>
+        </div>
+      </div>
+      
+      <!-- 分类管理 -->
+      <div v-if="showCategoryManager" class="category-manager">
+        <h2>分类管理</h2>
+        <div class="category-form">
+          <form @submit.prevent="addCategory">
+            <input v-model="newCategory" placeholder="新分类名称" required />
+            <button type="submit">添加分类</button>
+          </form>
+        </div>
+        <div class="categories-list">
+          <div v-for="category in categories" :key="category.id" class="category-item">
+            <span>{{ category.name }}</span>
+            <button @click="deleteCategory(category.id)">删除</button>
+          </div>
+        </div>
       </div>
       
       <!-- 语音输入组件 -->
@@ -58,7 +99,7 @@
       
       <!-- 添加知识条目表单 -->
       <div v-if="showAddForm" class="add-form">
-        <h2>添加新知识条目</h2>
+        <h2>{{ editingItem ? '编辑知识条目' : '添加新知识条目' }}</h2>
         <form @submit.prevent="addKnowledgeItem">
           <div>
             <label for="title">标题:</label>
@@ -70,7 +111,12 @@
           </div>
           <div>
             <label for="category">分类:</label>
-            <input id="category" v-model="newItem.category" required />
+            <select id="category" v-model="newItem.category" required>
+              <option value="">请选择分类</option>
+              <option v-for="category in categories" :key="category.id" :value="category.name">
+                {{ category.name }}
+              </option>
+            </select>
           </div>
           <div>
             <label for="location">位置:</label>
@@ -79,7 +125,7 @@
           <div v-if="currentLocation" class="location-info">
             <p>当前坐标: {{ currentLocation.latitude }}, {{ currentLocation.longitude }}</p>
           </div>
-          <button type="submit">添加</button>
+          <button type="submit">{{ editingItem ? '更新' : '添加' }}</button>
         </form>
       </div>
       
@@ -135,8 +181,17 @@ const authForm = ref({
 // 知识条目列表
 const knowledgeItems = ref<KnowledgeItem[]>([])
 
+// 分类列表
+const categories = ref<{ id: number; name: string }[]>([])
+
 // 控制添加表单显示
 const showAddForm = ref(false)
+
+// 控制分类管理显示
+const showCategoryManager = ref(false)
+
+// 控制会议录音显示
+const showMeetingRecorder = ref(false)
 
 // 控制语音输入显示
 const showVoiceInput = ref(false)
@@ -152,6 +207,9 @@ const newItem = ref<KnowledgeItem>({
   longitude: undefined
 })
 
+// 新分类名称
+const newCategory = ref('')
+
 // 当前位置信息
 const currentLocation = ref<{ latitude: number; longitude: number } | null>(null)
 
@@ -160,6 +218,12 @@ const isRecording = ref(false)
 const mediaRecorder = ref<MediaRecorder | null>(null)
 const audioChunks = ref<Blob[]>([])
 const transcribedText = ref('')
+
+// 会议录音相关
+const isMeetingRecording = ref(false)
+const meetingMediaRecorder = ref<MediaRecorder | null>(null)
+const meetingAudioChunks = ref<Blob[]>([])
+const meetingAudioUrl = ref<string | null>(null)
 
 // 编辑中的条目
 const editingItem = ref<KnowledgeItem | null>(null)
@@ -222,8 +286,67 @@ const fetchKnowledgeItems = async () => {
       }
     })
     knowledgeItems.value = await response.json()
+    
+    // 同时获取分类列表
+    fetchCategories()
   } catch (error) {
     console.error('获取知识条目失败:', error)
+  }
+}
+
+// 获取分类列表
+const fetchCategories = async () => {
+  try {
+    const response = await fetch('http://localhost:8000/categories', {
+      headers: {
+        'Authorization': `Bearer ${authToken.value}`
+      }
+    })
+    categories.value = await response.json()
+  } catch (error) {
+    console.error('获取分类列表失败:', error)
+  }
+}
+
+// 添加分类
+const addCategory = async () => {
+  try {
+    const response = await fetch('http://localhost:8000/categories', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken.value}`
+      },
+      body: JSON.stringify({ name: newCategory.value })
+    })
+    
+    const addedCategory = await response.json()
+    categories.value.push(addedCategory)
+    newCategory.value = ''
+  } catch (error) {
+    console.error('添加分类失败:', error)
+  }
+}
+
+// 删除分类
+const deleteCategory = async (id: number) => {
+  if (!confirm('确定要删除这个分类吗？这将删除该分类下的所有知识条目。')) return
+  
+  try {
+    await fetch(`http://localhost:8000/categories/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${authToken.value}`
+      }
+    })
+    
+    // 从列表中移除
+    categories.value = categories.value.filter(category => category.id !== id)
+    
+    // 刷新知识条目列表
+    fetchKnowledgeItems()
+  } catch (error) {
+    console.error('删除分类失败:', error)
   }
 }
 
@@ -340,6 +463,72 @@ const stopRecording = async () => {
       console.error('语音识别失败:', error)
       alert('语音识别失败，请重试')
     }
+  }
+}
+
+// 开始会议录音
+const startMeetingRecording = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    meetingMediaRecorder.value = new MediaRecorder(stream)
+    meetingAudioChunks.value = []
+    
+    meetingMediaRecorder.value.ondataavailable = (event) => {
+      meetingAudioChunks.value.push(event.data)
+    }
+    
+    meetingMediaRecorder.value.start()
+    isMeetingRecording.value = true
+  } catch (error) {
+    console.error('无法访问麦克风:', error)
+    alert('无法访问麦克风，请检查权限设置')
+  }
+}
+
+// 停止会议录音
+const stopMeetingRecording = () => {
+  if (!meetingMediaRecorder.value) return
+  
+  meetingMediaRecorder.value.stop()
+  isMeetingRecording.value = false
+  
+  meetingMediaRecorder.value.onstop = () => {
+    // 创建音频文件URL用于预览
+    const audioBlob = new Blob(meetingAudioChunks.value, { type: 'audio/wav' })
+    meetingAudioUrl.value = URL.createObjectURL(audioBlob)
+  }
+}
+
+// 保存会议录音
+const saveMeetingRecording = async () => {
+  if (meetingAudioChunks.value.length === 0) return
+  
+  try {
+    // 创建音频文件
+    const audioBlob = new Blob(meetingAudioChunks.value, { type: 'audio/wav' })
+    const formData = new FormData()
+    formData.append('file', audioBlob, 'meeting-recording.wav')
+    
+    // 上传到后端保存
+    const response = await fetch('http://localhost:8000/meeting-recordings', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Authorization': `Bearer ${authToken.value}`
+      }
+    })
+    
+    if (response.ok) {
+      alert('会议录音保存成功')
+      // 重置状态
+      meetingAudioUrl.value = null
+      meetingAudioChunks.value = []
+    } else {
+      alert('会议录音保存失败')
+    }
+  } catch (error) {
+    console.error('保存会议录音失败:', error)
+    alert('保存会议录音失败，请重试')
   }
 }
 
@@ -488,6 +677,66 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
+.category-manager {
+  background-color: #f5f5f5;
+  padding: 20px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.category-form {
+  margin-bottom: 15px;
+}
+
+.category-form input {
+  width: 70%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.category-form button {
+  width: 25%;
+  margin-left: 5%;
+  padding: 8px 16px;
+  background-color: #42b983;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.category-form button:hover {
+  background-color: #359c6d;
+}
+
+.categories-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.category-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+.category-item button {
+  padding: 5px 10px;
+  background-color: #ff4d4f;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.category-item button:hover {
+  background-color: #d9363e;
+}
+
 .voice-input {
   background-color: #f5f5f5;
   padding: 20px;
@@ -516,6 +765,65 @@ onMounted(() => {
 .recording-controls button:disabled {
   background-color: #cccccc;
   cursor: not-allowed;
+}
+
+.meeting-recorder {
+  background-color: #f5f5f5;
+  padding: 20px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.meeting-recorder .recording-controls {
+  margin-bottom: 15px;
+}
+
+.meeting-recorder .recording-controls button {
+  margin-right: 10px;
+  padding: 8px 16px;
+  background-color: #42b983;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.meeting-recorder .recording-controls button:hover {
+  background-color: #359c6d;
+}
+
+.meeting-recorder .recording-controls button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.meeting-audio {
+  background-color: #e8f5e9;
+  padding: 15px;
+  border-radius: 4px;
+  margin-top: 15px;
+}
+
+.meeting-audio h3 {
+  margin-top: 0;
+}
+
+.meeting-audio audio {
+  width: 100%;
+  margin: 10px 0;
+}
+
+.meeting-audio button {
+  padding: 5px 10px;
+  background-color: #42b983;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.meeting-audio button:hover {
+  background-color: #359c6d;
 }
 
 .transcribed-text {
@@ -564,12 +872,14 @@ onMounted(() => {
 }
 
 .add-form input,
-.add-form textarea {
+.add-form textarea,
+.add-form select {
   width: 100%;
   padding: 8px;
   border: 1px solid #ddd;
   border-radius: 4px;
   box-sizing: border-box;
+  background-color: white;
 }
 
 .add-form textarea {

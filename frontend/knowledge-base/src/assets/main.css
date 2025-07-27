@@ -33,3 +33,6 @@ a,
     padding: 0 2rem;
   }
 }
+
+/* 引入移动端样式 */
+@import './mobile.css';
