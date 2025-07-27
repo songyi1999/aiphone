@@ -59,6 +59,19 @@ CREATE TABLE IF NOT EXISTS item_categories (
 )
 """)
 
+# 创建会议录音表
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS meeting_recordings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    filename TEXT NOT NULL,
+    title TEXT,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    user_id INTEGER,
+    FOREIGN KEY (user_id) REFERENCES users (id)
+)
+""")
+
 # 提交更改并关闭连接
 conn.commit()
 conn.close()

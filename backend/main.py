@@ -14,6 +14,7 @@ from passlib.context import CryptContext
 import sqlite3
 from pathlib import Path
 import openai
+from rag import initialize_rag_system, get_knowledge_items_from_db
 
 # JWT配置
 SECRET_KEY = "your-secret-key-change-in-production"
@@ -25,6 +26,9 @@ OPENAI_API_KEY = "your-openai-api-key"
 openai.api_key = OPENAI_API_KEY
 
 app = FastAPI(title="个人知识库API", description="个人知识库后端API服务")
+
+# 初始化RAG系统
+rag_system = initialize_rag_system()
 
 # 添加CORS中间件以允许前端访问
 app.add_middleware(
@@ -110,6 +114,44 @@ def get_db_connection():
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     return conn
+
+# RAG相关API
+@app.post("/rag/initialize")
+def initialize_rag():
+    """初始化RAG系统并加载所有知识条目"""
+    try:
+        # 从数据库获取所有知识条目
+        knowledge_items = get_knowledge_items_from_db()
+        
+        # 添加到向量数据库
+        result = rag_system.add_knowledge(knowledge_items)
+        
+        return {"message": "RAG系统初始化成功", "details": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"初始化RAG系统时出错: {e}")
+
+@app.post("/rag/query")
+def query_rag(query: str, user_id: Optional[int] = None):
+    """使用RAG查询知识"""
+    try:
+        result = rag_system.query_knowledge(query, user_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"RAG查询时出错: {e}")
+
+@app.post("/rag/update")
+def update_rag():
+    """更新RAG向量数据库（重新加载所有知识条目）"""
+    try:
+        # 从数据库获取所有知识条目
+        knowledge_items = get_knowledge_items_from_db()
+        
+        # 添加到向量数据库
+        result = rag_system.add_knowledge(knowledge_items)
+        
+        return {"message": "RAG向量数据库更新成功", "details": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新RAG向量数据库时出错: {e}")
 
 # 用户相关API
 @app.post("/users/", response_model=User)
@@ -341,6 +383,28 @@ def create_category(category: Category):
         user_id=category.user_id
     )
 
+@app.delete("/categories/{category_id}")
+def delete_category(category_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # 检查分类是否存在
+    cursor.execute("SELECT * FROM categories WHERE id = ?", (category_id,))
+    existing_category = cursor.fetchone()
+    if not existing_category:
+        conn.close()
+        raise HTTPException(status_code=404, detail="分类未找到")
+    
+    # 删除关联的知识条目
+    cursor.execute("DELETE FROM knowledge_items WHERE category = ?", (existing_category['name'],))
+    
+    # 删除分类
+    cursor.execute("DELETE FROM categories WHERE id = ?", (category_id,))
+    conn.commit()
+    conn.close()
+    
+    return {"message": "分类删除成功"}
+
 # 语音识别API
 @app.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
@@ -368,6 +432,86 @@ async def transcribe_audio(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"语音识别服务错误: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"处理音频文件时出错: {e}")
+
+# 会议录音上传API
+@app.post("/meeting-recordings")
+async def upload_meeting_recording(file: UploadFile = File(...)):
+    # 保存上传的会议录音文件
+    file_extension = file.filename.split(".")[-1]
+    filename = f"meeting_{uuid.uuid4()}.{file_extension}"
+    file_path = os.path.join("uploads", filename)
+    os.makedirs("uploads", exist_ok=True)
+    
+    with open(file_path, "wb") as buffer:
+        buffer.write(await file.read())
+    
+    return {"message": "会议录音上传成功", "filename": filename}
+
+@app.get("/meeting-recordings")
+def get_meeting_recordings():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM meeting_recordings")
+    recordings = cursor.fetchall()
+    conn.close()
+    
+    return [
+        {
+            "id": recording["id"],
+            "filename": recording["filename"],
+            "title": recording["title"],
+            "description": recording["description"],
+            "created_at": recording["created_at"],
+            "user_id": recording["user_id"]
+        }
+        for recording in recordings
+    ]
+
+@app.post("/meeting-recordings/{recording_id}")
+def update_meeting_recording(recording_id: int, title: str, description: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # 检查录音是否存在
+    cursor.execute("SELECT * FROM meeting_recordings WHERE id = ?", (recording_id,))
+    existing_recording = cursor.fetchone()
+    if not existing_recording:
+        conn.close()
+        raise HTTPException(status_code=404, detail="会议录音未找到")
+    
+    # 更新录音信息
+    cursor.execute(
+        "UPDATE meeting_recordings SET title=?, description=? WHERE id=?",
+        (title, description, recording_id)
+    )
+    conn.commit()
+    conn.close()
+    
+    return {"message": "会议录音信息更新成功"}
+
+@app.delete("/meeting-recordings/{recording_id}")
+def delete_meeting_recording(recording_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # 检查录音是否存在
+    cursor.execute("SELECT * FROM meeting_recordings WHERE id = ?", (recording_id,))
+    existing_recording = cursor.fetchone()
+    if not existing_recording:
+        conn.close()
+        raise HTTPException(status_code=404, detail="会议录音未找到")
+    
+    # 删除录音文件
+    file_path = os.path.join("uploads", existing_recording["filename"])
+    if os.path.exists(file_path):
+        os.remove(file_path)
+    
+    # 删除数据库记录
+    cursor.execute("DELETE FROM meeting_recordings WHERE id = ?", (recording_id,))
+    conn.commit()
+    conn.close()
+    
+    return {"message": "会议录音删除成功"}
 
 # AI对话API
 @app.post("/chat")
